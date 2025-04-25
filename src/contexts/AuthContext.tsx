@@ -1,11 +1,14 @@
-import { createContext, useState, useContext, useEffect, ReactNode } from 'react';
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-}
+// src/contexts/AuthContext.tsx
+import {
+  createContext,
+  useState,
+  useContext,
+  useEffect,
+  ReactNode,
+} from "react";
+import { User } from "../types/models";
+import { authService } from "../services/auth.service";
+import { toast } from "../components/ui/Toaster";
 
 interface AuthContextType {
   user: User | null;
@@ -15,51 +18,68 @@ interface AuthContextType {
   logout: () => void;
 }
 
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
 export function useAuth() {
   return useContext(AuthContext);
 }
 
+
 interface AuthProviderProps {
   children: ReactNode;
 }
+
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is stored in localStorage
-    const storedUser = localStorage.getItem('girowms_user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
+    // Verifica se há um usuário armazenado no localStorage
+    const loadUser = () => {
+      const currentUser = authService.getCurrentUser();
+      if (currentUser) {
+        setUser(currentUser);
+      }
+      setIsLoading(false);
+    };
+
+    loadUser();
   }, []);
 
   const login = async (email: string, password: string) => {
-    // In a real app, you would call an API here
-    // For demo purposes, we'll simulate a successful login
-    if (email && password) {
-      const mockUser = {
-        id: '1',
-        name: 'Willams',
-        email,
-        role: 'admin',
-      };
-      
-      setUser(mockUser);
-      localStorage.setItem('girowms_user', JSON.stringify(mockUser));
+    try {
+      setIsLoading(true);
+      const response = await authService.login({ email, password });
+      setUser(response.user);
+      toast("Login realizado com sucesso!", "success");
       return Promise.resolve();
+    } catch (error) {
+      console.error("Erro ao fazer login:", error);
+      const message =
+        error instanceof Error ? error.message : "Erro ao fazer login";
+      toast(message, "error");
+      return Promise.reject(error);
+    } finally {
+      setIsLoading(false);
     }
-    
-    return Promise.reject(new Error('Credenciais inválidas'));
   };
 
   const logout = () => {
-    setUser(null);
-    localStorage.removeItem('girowms_user');
+    try {
+      authService.logout();
+      setUser(null);
+      toast("Logout realizado com sucesso!", "info");
+    } catch (error) {
+      console.error("Erro ao fazer logout:", error);
+      const message =
+        error instanceof Error ? error.message : "Erro ao fazer logout";
+      toast(message, "error");
+    }
   };
 
   const value = {

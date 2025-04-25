@@ -1,36 +1,51 @@
-import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  ShoppingCart, 
-  Package, 
-  Boxes, 
-  Truck, 
-  ClipboardList, 
-  LineChart, 
-  Users, 
-  Building2, 
-  Warehouse, 
+// src/components/navigation/Sidebar.tsx
+import { useState, useEffect } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import {
+  LayoutDashboard,
+  ShoppingCart,
+  Package,
+  Boxes,
+  Truck,
+  ClipboardList,
+  LineChart,
+  Users,
+  Building2,
+  Warehouse,
   HeadphonesIcon,
-  ChevronDown
-} from 'lucide-react';
-import Logo from './Logo';
-import { cn } from '../../utils/cn';
+  ChevronDown,
+  LogOut,
+  Settings,
+} from "lucide-react";
+import Logo from "./Logo";
+import { cn } from "../../utils/cn";
+import { useAuth } from "../../contexts/AuthContext";
 
-interface NavItemProps {
+interface NavItem {
   to: string;
   icon: React.ReactNode;
   label: string;
   subItems?: Array<{ to: string; label: string }>;
-  active?: boolean;
 }
 
-function NavItem({ to, icon, label, subItems, active }: NavItemProps) {
-  const [isOpen, setIsOpen] = useState(active && subItems?.length ? true : false);
+interface NavItemProps extends NavItem {
+  active?: boolean;
+  openSubMenu: (to: string) => void;
+  isOpen: boolean;
+}
 
+function NavItem({
+  to,
+  icon,
+  label,
+  subItems,
+  active,
+  openSubMenu,
+  isOpen,
+}: NavItemProps) {
   const handleToggle = () => {
     if (subItems?.length) {
-      setIsOpen(!isOpen);
+      openSubMenu(to);
     }
   };
 
@@ -39,7 +54,9 @@ function NavItem({ to, icon, label, subItems, active }: NavItemProps) {
       <div
         className={cn(
           "flex items-center gap-3 px-4 py-3 text-white/80 hover:bg-secondary-400 transition-colors cursor-pointer",
-          active && !subItems?.length && "bg-secondary-400 text-white font-medium"
+          active &&
+            !subItems?.length &&
+            "bg-secondary-400 text-white font-medium"
         )}
         onClick={handleToggle}
       >
@@ -47,12 +64,12 @@ function NavItem({ to, icon, label, subItems, active }: NavItemProps) {
         {subItems?.length ? (
           <div className="flex items-center justify-between w-full">
             <span>{label}</span>
-            <ChevronDown 
-              size={16} 
+            <ChevronDown
+              size={16}
               className={cn(
-                "transition-transform", 
+                "transition-transform",
                 isOpen && "transform rotate-180"
-              )} 
+              )}
             />
           </div>
         ) : (
@@ -84,9 +101,46 @@ function NavItem({ to, icon, label, subItems, active }: NavItemProps) {
 
 export default function Sidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout, user } = useAuth();
   const pathName = location.pathname;
+  const [openMenus, setOpenMenus] = useState<string[]>([]);
 
-  const navItems = [
+  // Carregar menus abertos do localStorage ao montar o componente
+  useEffect(() => {
+    const savedOpenMenus = localStorage.getItem("girowms_open_menus");
+    if (savedOpenMenus) {
+      setOpenMenus(JSON.parse(savedOpenMenus));
+    }
+  }, []);
+
+  // Salvar menus abertos no localStorage quando mudar
+  useEffect(() => {
+    localStorage.setItem("girowms_open_menus", JSON.stringify(openMenus));
+  }, [openMenus]);
+
+  // Abrir automaticamente o menu pai da rota atual
+  useEffect(() => {
+    const currentParentMenu = navItems.find((item) =>
+      item.subItems?.some((subItem) => subItem.to === pathName)
+    );
+
+    if (currentParentMenu && !openMenus.includes(currentParentMenu.to)) {
+      setOpenMenus((prev) => [...prev, currentParentMenu.to]);
+    }
+  }, [pathName]);
+
+  const toggleSubMenu = (to: string) => {
+    setOpenMenus((prev) => {
+      if (prev.includes(to)) {
+        return prev.filter((item) => item !== to);
+      } else {
+        return [...prev, to];
+      }
+    });
+  };
+
+  const navItems: NavItem[] = [
     {
       to: "/dashboard",
       icon: <LayoutDashboard size={20} />,
@@ -164,16 +218,23 @@ export default function Sidebar() {
     },
   ];
 
-  const isActive = (item: typeof navItems[0]) => {
+  const isActive = (item: NavItem) => {
     if (item.to === pathName) {
       return true;
     }
-    
+
     if (item.subItems) {
-      return item.subItems.some(subItem => subItem.to === pathName);
+      return item.subItems.some((subItem) => subItem.to === pathName);
     }
-    
+
     return false;
+  };
+
+  const handleLogout = () => {
+    if (confirm("Tem certeza que deseja sair?")) {
+      logout();
+      navigate("/login");
+    }
   };
 
   return (
@@ -181,11 +242,11 @@ export default function Sidebar() {
       <div className="p-4 flex items-center justify-center">
         <Logo />
       </div>
-      
+
       <div className="px-4 py-2 bg-secondary-600 text-white font-medium">
         MENU
       </div>
-      
+
       <nav className="flex-1 overflow-y-auto">
         {navItems.map((item) => (
           <NavItem
@@ -195,16 +256,32 @@ export default function Sidebar() {
             label={item.label}
             subItems={item.subItems}
             active={isActive(item)}
+            openSubMenu={toggleSubMenu}
+            isOpen={openMenus.includes(item.to)}
           />
         ))}
       </nav>
-      
-      <div className="border-t border-secondary-400 mt-auto">
-        <NavItem
-          to="/suporte"
-          icon={<HeadphonesIcon size={20} />}
-          label="Suporte"
-        />
+
+      <div className="border-t border-secondary-400 mt-auto p-4">
+        {user && (
+          <div className="flex flex-col space-y-4">
+            <Link
+              to="/configuracoes"
+              className="flex items-center gap-3 px-4 py-2 text-white/80 hover:bg-secondary-400 rounded-md transition-colors"
+            >
+              <Settings size={20} />
+              <span>Configurações</span>
+            </Link>
+
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-3 px-4 py-2 text-white/80 hover:bg-danger-500 rounded-md transition-colors w-full"
+            >
+              <LogOut size={20} />
+              <span>Sair</span>
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );
